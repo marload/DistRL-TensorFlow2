@@ -10,7 +10,7 @@ from collections import deque
 import random
 
 tf.keras.backend.set_floatx('float64')
-wandb.init(name='DQN', project="deep-rl-tf2")
+wandb.init(name='C51', project="deep-rl-tf2")
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--gamma', type=float, default=0.95)
@@ -77,7 +77,7 @@ class ActionStateModel:
         z = self.predict(state)
         z_concat = np.vstack(z)
         q = np.sum(np.multiply(z_concat, np.array(self.z)), axis=1)
-        return np.argmax(q)
+        return np.argmax
 
     def train(self, states, targets):
         self.model.fit(states, targets, epochs=1, verbose=0)
@@ -108,6 +108,9 @@ class Agent:
             next_q_values = self.target_model.predict(next_states).max(axis=1)
             targets[range(args.batch_size), actions] = rewards + (1-done) * next_q_values * args.gamma
             self.model.train(states, targets)
+
+    def projection(self, dist):
+        pass
     
     def train(self, max_episodes=1000):
         for ep in range(max_episodes):
