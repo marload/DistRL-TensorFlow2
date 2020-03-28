@@ -76,6 +76,8 @@ class ActionStateModel:
     def get_optimal_action(self, state):
         z = self.predict(state)
         z_concat = np.vstack(z)
+        q = np.sum(np.multiply(z_concat, np.array(self.z)), axis=1)
+        return np.argmax(q)
 
     def train(self, states, targets):
         self.model.fit(states, targets, epochs=1, verbose=0)
