@@ -43,20 +43,15 @@ class ReplayBuffer:
         return len(self.buffer)
 
 class ActionStateModel:
-    def __init__(self, state_dim, aciton_dim):
+    def __init__(self, state_dim, aciton_dim, z):
         self.state_dim  = state_dim
         self.action_dim = aciton_dim
         self.epsilon = args.eps
+        self.z = z
         
         self.model = self.create_model()
     
     def create_model(self):
-        # model = tf.keras.Sequential([
-        #     Input((self.state_dim,)),
-        #     Dense(32, activation='relu'),
-        #     Dense(16, activation='relu'),
-        #     Dense(self.action_dim)
-        # ])
         input_state = Input((self.state_dim,))
         dense_1 = Dense(32, activation='relu')
         dense_2 = Dense(16, activation='relu')
@@ -74,10 +69,13 @@ class ActionStateModel:
         state = np.reshape(state, [1, self.state_dim])
         self.epsilon *= args.eps_decay
         self.epsilon = max(self.epsilon, args.eps_min)
-        q_value = self.predict(state)[0]
         if np.random.random() < self.epsilon:
             return random.randint(0, self.action_dim-1)
-        return np.argmax(q_value)
+        return self.get_optimal_action(state)
+
+    def get_optimal_action(self, state):
+        z = self.predict(state)
+        z_concat = np.vstack(z)
 
     def train(self, states, targets):
         self.model.fit(states, targets, epochs=1, verbose=0)
@@ -88,9 +86,11 @@ class Agent:
         self.env = env
         self.state_dim = self.env.observation_space.shape[0]
         self.action_dim = self.env.action_space.n
+        self.delta_z = (args.v_max - args.v_min) / float(args.atoms-1)
+        self.z = [args.v_min + self.delta_z * i for i in range(args.atoms)]
 
-        self.model = ActionStateModel(self.state_dim, self.action_dim)
-        self.target_model = ActionStateModel(self.state_dim, self.action_dim)
+        self.model = ActionStateModel(self.state_dim, self.action_dim, self.z)
+        self.target_model = ActionStateModel(self.state_dim, self.action_dim, self.z)
         self.target_update()
 
         self.buffer = ReplayBuffer()
