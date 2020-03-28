@@ -19,6 +19,9 @@ parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--eps', type=float, default=1.0)
 parser.add_argument('--eps_decay', type=float, default=0.995)
 parser.add_argument('--eps_min', type=float, default=0.01)
+parser.add_argument('--atoms', type=int, default=51)
+parser.add_argument('--v_min', type=float, default=-10.)
+parser.add_argument('--v_max', type=float, default=10.)
 
 args = parser.parse_args()
 
@@ -48,13 +51,20 @@ class ActionStateModel:
         self.model = self.create_model()
     
     def create_model(self):
-        model = tf.keras.Sequential([
-            Input((self.state_dim,)),
-            Dense(32, activation='relu'),
-            Dense(16, activation='relu'),
-            Dense(self.action_dim)
-        ])
-        model.compile(loss='mse', optimizer=Adam(args.lr))
+        # model = tf.keras.Sequential([
+        #     Input((self.state_dim,)),
+        #     Dense(32, activation='relu'),
+        #     Dense(16, activation='relu'),
+        #     Dense(self.action_dim)
+        # ])
+        input_state = Input((self.state_dim,))
+        dense_1 = Dense(32, activation='relu')
+        dense_2 = Dense(16, activation='relu')
+        outputs = []
+        for _ in range(args.actions):
+            outputs.append(Dense(args.atoms))
+        model = tf.keras.Model(input_state, outputs)
+        model.compile(loss='categorical_crossentropy', optimizer=Adam(args.lr))
         return model
     
     def predict(self, state):
