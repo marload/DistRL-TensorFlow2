@@ -1,6 +1,6 @@
 import wandb
 import tensorflow as tf
-from tensorflow.keras.layers import Input, Dense, Flatten, Lambda
+from tensorflow.keras.layers import Input, Dense, Reshape, Softmax
 from tensorflow.keras.optimizers import Adam
 
 import gym
@@ -8,20 +8,18 @@ import argparse
 import numpy as np
 from collections import deque
 import random
+import math
 
 tf.keras.backend.set_floatx('float64')
-wandb.init(name='C51', project="deep-rl-tf2")
+wandb.init(name='C51', project="dist-rl-tf2")
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--gamma', type=float, default=0.95)
-parser.add_argument('--lr', type=float, default=0.005)
-parser.add_argument('--batch_size', type=int, default=32)
-parser.add_argument('--eps', type=float, default=1.0)
-parser.add_argument('--eps_decay', type=float, default=0.995)
-parser.add_argument('--eps_min', type=float, default=0.01)
-parser.add_argument('--atoms', type=int, default=51)
-parser.add_argument('--v_min', type=float, default=-10.)
-parser.add_argument('--v_max', type=float, default=10.)
+parser.add_argument('--gamma', type=float, default=0.99)
+parser.add_argument('--lr', type=float, default=0.0001)
+parser.add_argument('--batch_size', type=int, default=8)
+parser.add_argument('--atoms', type=int, default=8)
+parser.add_argument('--v_min', type=float, default=-5.)
+parser.add_argument('--v_max', type=float, default=5.)
 
 args = parser.parse_args()
 
@@ -42,98 +40,122 @@ class ReplayBuffer:
     def size(self):
         return len(self.buffer)
 
-class ActionStateModel:
-    def __init__(self, state_dim, aciton_dim, z):
-        self.state_dim  = state_dim
-        self.action_dim = aciton_dim
-        self.epsilon = args.eps
+
+class ActionValueModel:
+    def __init__(self, state_dim, action_dim, z):
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.atoms = args.atoms
         self.z = z
-        
+
+        self.opt = tf.keras.optimizers.Adam(args.lr)
+        self.criterion = tf.keras.losses.CategoricalCrossentropy()
         self.model = self.create_model()
-    
+
     def create_model(self):
         input_state = Input((self.state_dim,))
-        dense_1 = Dense(32, activation='relu')
-        dense_2 = Dense(16, activation='relu')
+        h1 = Dense(64, activation='relu')(input_state)
+        h2 = Dense(64, activation='relu')(h1)
         outputs = []
-        for _ in range(args.actions):
-            outputs.append(Dense(args.atoms))
-        model = tf.keras.Model(input_state, outputs)
-        model.compile(loss='categorical_crossentropy', optimizer=Adam(args.lr))
-        return model
+        for _ in range(self.action_dim):
+            outputs.append(Dense(self.atoms, activation='softmax')(h2))
+        return tf.keras.Model(input_state, outputs)
+    
+    def train(self, x, y):
+        y = tf.stop_gradient(y)
+        with tf.GradientTape() as tape:
+            logits = self.model(x)
+            loss = self.criterion(y, logits)
+        grads = tape.gradient(loss, self.model.trainable_variables)
+        self.opt.apply_gradients(zip(grads, self.model.trainable_variables))
     
     def predict(self, state):
         return self.model.predict(state)
     
-    def get_action(self, state):
+    def get_action(self, state, ep):
         state = np.reshape(state, [1, self.state_dim])
-        self.epsilon *= args.eps_decay
-        self.epsilon = max(self.epsilon, args.eps_min)
-        if np.random.random() < self.epsilon:
-            return random.randint(0, self.action_dim-1)
-        return self.get_optimal_action(state)
-
+        eps = 1. / ((ep / 10) + 1)
+        if np.random.rand() < eps:
+            return np.random.randint(0, self.action_dim)
+        else:
+            return self.get_optimal_action(state)
+        
     def get_optimal_action(self, state):
-        z = self.predict(state)
+        z = self.model.predict(state)
         z_concat = np.vstack(z)
         q = np.sum(np.multiply(z_concat, np.array(self.z)), axis=1)
-        return np.argmax
-
-    def train(self, states, targets):
-        self.model.fit(states, targets, epochs=1, verbose=0)
-    
+        return np.argmax(q)
 
 class Agent:
     def __init__(self, env):
         self.env = env
-        self.state_dim = self.env.observation_space.shape[0]
-        self.action_dim = self.env.action_space.n
-        self.delta_z = (args.v_max - args.v_min) / float(args.atoms-1)
-        self.z = [args.v_min + self.delta_z * i for i in range(args.atoms)]
-
-        self.model = ActionStateModel(self.state_dim, self.action_dim, self.z)
-        self.target_model = ActionStateModel(self.state_dim, self.action_dim, self.z)
-        self.target_update()
-
+        self.state_dim = env.observation_space.shape[0]
+        self.action_dim = env.action_space.n
         self.buffer = ReplayBuffer()
-
+        self.batch_size = args.batch_size
+        self.v_max = args.v_max
+        self.v_min = args.v_min
+        self.atoms = args.atoms
+        self.delta_z = float(self.v_max - self.v_min) / (self.atoms - 1)
+        self.z = [self.v_min + i * self.delta_z for i in range(self.atoms)]
+        self.gamma = args.gamma
+        self.q = ActionValueModel(self.state_dim, self.action_dim, self.z)
+        self.q_target = ActionValueModel(self.state_dim, self.action_dim, self.z)
+        self.target_update()
+    
     def target_update(self):
-        weights = self.model.model.get_weights()
-        self.target_model.model.set_weights(weights)
+        weights = self.q.model.get_weights()
+        self.q_target.model.set_weights(weights)
     
     def replay(self):
-        for _ in range(10):
-            states, actions, rewards, next_states, done = self.buffer.sample()
-            targets = self.target_model.predict(states)
-            next_q_values = self.target_model.predict(next_states).max(axis=1)
-            targets[range(args.batch_size), actions] = rewards + (1-done) * next_q_values * args.gamma
-            self.model.train(states, targets)
+        states, actions, rewards, next_states, dones = self.buffer.sample()
+        z = self.q.predict(next_states)
+        z_ = self.q_target.predict(next_states)
+        z_concat = np.vstack(z)
+        q = np.sum(np.multiply(z_concat, np.array(self.z)), axis=1)
+        q = q.reshape((self.batch_size, self.action_dim), order='F')
+        optimal_action_idxs = np.argmax(q, axis=1)
+        m_prob = [np.zeros((self.batch_size, self.atoms)) for _ in range(self.action_dim)]
+        for i in range(self.batch_size):
+            if dones[i]:
+                Tz = min(self.v_max, max(self.v_min, rewards[i]))
+                bj = (Tz - self.v_min) / self.delta_z
+                l, u = math.floor(bj), math.ceil(bj)
+                m_prob[actions[i]][i][int(l)] += (u - bj)
+                m_prob[actions[i]][i][int(u)] += (bj - l)
+            else:
+                for j in range(self.atoms):
+                    Tz = min(self.v_max, max(self.v_min, rewards[i] + self.gamma * self.z[j]))
+                    bj = (Tz - self.v_min) / self.delta_z
+                    l, u = math.floor(bj), math.ceil(bj)
+                    m_prob[actions[i]][i][int(l)] += z_[optimal_action_idxs[i]][i][j] * (u - bj)
+                    m_prob[actions[i]][i][int(u)] += z_[optimal_action_idxs[i]][i][j] * (bj - l)
+        self.q.train(states, m_prob)
 
-    def projection(self, dist):
-        pass
-    
-    def train(self, max_episodes=1000):
-        for ep in range(max_episodes):
-            done, total_reward = False, 0
+    def train(self, max_epsiodes=1000):
+        for ep in range(max_epsiodes):
+            done, total_reward, steps = False, 0, 0
             state = self.env.reset()
             while not done:
-                action = self.model.get_action(state)
+                action = self.q.get_action(state, ep)
                 next_state, reward, done, _ = self.env.step(action)
-                self.buffer.put(state, action, reward*0.01, next_state, done)
-                total_reward += reward
+                self.buffer.put(state, action, -1 if done else 0, next_state, done)
+                
+                if self.buffer.size() > 1000:
+                    self.replay()
+                if steps % 5 == 0:
+                    self.target_update()
+                
                 state = next_state
-            if self.buffer.size() >= args.batch_size:
-                self.replay()
-            self.target_update()
-            print('EP{} EpisodeReward={}'.format(ep, total_reward))
-            wandb.log({'Reward': total_reward})
-
+                total_reward += reward
+                steps += 1
+            wandb.log({'reward': total_reward})
+            print('EP{} reward={}'.format(ep, total_reward))
 
 def main():
     env = gym.make('CartPole-v1')
     agent = Agent(env)
-    agent.train(max_episodes=1000)
+    agent.train()
 
 if __name__ == "__main__":
     main()
-    
