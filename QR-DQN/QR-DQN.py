@@ -1,4 +1,4 @@
-import wandb
+# import wandb
 import tensorflow as tf
 from tensorflow.keras.layers import Input, Dense, Reshape, Softmax
 from tensorflow.keras.optimizers import Adam
@@ -50,7 +50,8 @@ class ActionValueModel:
         self.model = self.create_model()
 
     def create_model(self):
-        return tf.keras.Seqeuntial([
+        return tf.keras.Sequential([
+            Input([self.state_dim,]),
             Dense(64, activation='relu'),
             Dense(64, activation='relu'),
             Dense(64, activation='relu'),
@@ -78,7 +79,6 @@ class ActionValueModel:
     def train(self, states, target, actions):
         with tf.GradientTape() as tape:
             theta = self.model(states)
-            theta = tf.transpose(np.array(theta), [1, 0, 2])
             loss = self.quantile_huber_loss(target, theta, actions)
         grads = tape.gradient(loss, self.model.trainable_variables)
         self.opt.apply_gradients(zip(grads, self.model.trainable_variables))
@@ -96,8 +96,8 @@ class ActionValueModel:
         
     def get_optimal_action(self, state):
         z = self.model.predict(state)
-        z = [z[0][0], z[1][0]]
-        q = np.mean(np.array(z), axis=1)
+        q = np.mean(z, axis=2)
+        print(q.shape)
         return np.argmax(q)
 
 class Agent:
