@@ -50,14 +50,14 @@ class ActionValueModel:
         self.model = self.create_model()
 
     def create_model(self):
-        input_state = Input((self.state_dim,))
-        h1 = Dense(64, activation='relu')(input_state)
-        h2 = Dense(64, activation='relu')(h1)
-        h3 = Dense(64, activation='relu')(h2)
-        outputs = []
-        for _ in range(self.action_dim):
-            outputs.append(Dense(self.atoms, activation='linear')(h3))
-        return tf.keras.Model(input_state, outputs)
+        return tf.keras.Seqeuntial([
+            Dense(64, activation='relu'),
+            Dense(64, activation='relu'),
+            Dense(64, activation='relu'),
+            Dense(self.action_dim * self.atoms, activation='linear'),
+            Reshape([self.action_dim, self.atoms]),
+            Softmax(axis=2)
+        ])
 
 
     def quantile_huber_loss(self, target, pred, actions):
