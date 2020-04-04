@@ -5,3 +5,19 @@
 </p>
 
 <h2 align=center>Distributional RL in TensorFlow2</h2>
+
+## Algorithms
+
+- [C51](#c51)
+- [QRDQN](#qrdqn)
+- [IQN](#iqn)
+<hr>
+
+<a name='c51'></a>
+### C51
+
+<a name='qrdqn'></a>
+### QRDQN
+
+<a name='icn'></a>
+### ICN
