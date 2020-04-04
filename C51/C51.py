@@ -114,7 +114,7 @@ class Agent:
         z_concat = np.vstack(z)
         q = np.sum(np.multiply(z_concat, np.array(self.z)), axis=1)
         q = q.reshape((self.batch_size, self.action_dim), order='F')
-        optimal_action_idxs = np.argmax(q, axis=1)
+        next_actions = np.argmax(q, axis=1)
         m_prob = [np.zeros((self.batch_size, self.atoms)) for _ in range(self.action_dim)]
         for i in range(self.batch_size):
             if dones[i]:
@@ -128,8 +128,8 @@ class Agent:
                     Tz = min(self.v_max, max(self.v_min, rewards[i] + self.gamma * self.z[j]))
                     bj = (Tz - self.v_min) / self.delta_z
                     l, u = math.floor(bj), math.ceil(bj)
-                    m_prob[actions[i]][i][int(l)] += z_[optimal_action_idxs[i]][i][j] * (u - bj)
-                    m_prob[actions[i]][i][int(u)] += z_[optimal_action_idxs[i]][i][j] * (bj - l)
+                    m_prob[actions[i]][i][int(l)] += z_[next_actions[i]][i][j] * (u - bj)
+                    m_prob[actions[i]][i][int(u)] += z_[next_actions[i]][i][j] * (bj - l)
         self.q.train(states, m_prob)
 
     def train(self, max_epsiodes=1000):
