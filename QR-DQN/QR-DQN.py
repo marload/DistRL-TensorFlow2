@@ -56,8 +56,7 @@ class ActionValueModel:
             Dense(64, activation='relu'),
             Dense(64, activation='relu'),
             Dense(self.action_dim * self.atoms, activation='linear'),
-            Reshape([self.action_dim, self.atoms]),
-            Softmax(axis=2)
+            Reshape([self.action_dim, self.atoms])
         ])
 
 
