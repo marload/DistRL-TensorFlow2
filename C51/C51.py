@@ -132,7 +132,7 @@ class Agent:
                     m_prob[actions[i]][i][int(u)] += z_[next_actions[i]][i][j] * (bj - l)
         self.q.train(states, m_prob)
 
-    def train(self, max_epsiodes=1000):
+    def train(self, max_epsiodes=500):
         for ep in range(max_epsiodes):
             done, total_reward, steps = False, 0, 0
             state = self.env.reset()
