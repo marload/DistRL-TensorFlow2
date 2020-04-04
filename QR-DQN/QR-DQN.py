@@ -1,4 +1,4 @@
-# import wandb
+import wandb
 import tensorflow as tf
 from tensorflow.keras.layers import Input, Dense, Reshape, Softmax
 from tensorflow.keras.optimizers import Adam
@@ -11,7 +11,7 @@ import random
 import math
 
 tf.keras.backend.set_floatx('float64')
-# wandb.init(name='QR-DQN', project="dist-rl-tf2")
+wandb.init(name='QR-DQN', project="dist-rl-tf2")
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--gamma', type=float, default=0.99)
@@ -128,7 +128,7 @@ class Agent:
         self.q.train(states, theta, actions)
         
 
-    def train(self, max_epsiodes=1000):
+    def train(self, max_epsiodes=500):
         for ep in range(max_epsiodes):
             done, total_reward, steps = False, 0, 0
             state = self.env.reset()
@@ -147,7 +147,7 @@ class Agent:
                 state = next_state
                 total_reward += reward
                 steps += 1
-            # wandb.log({'reward': total_reward})
+            wandb.log({'reward': total_reward})
             print('EP{} reward={}'.format(ep, total_reward))
 
 def main():
