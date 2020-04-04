@@ -95,9 +95,8 @@ class ActionValueModel:
             return self.get_optimal_action(state)
         
     def get_optimal_action(self, state):
-        z = self.model.predict(state)
-        q = np.mean(z, axis=2)
-        print(q.shape)
+        z = self.model.predict(state)[0]
+        q = np.mean(z, axis=1)
         return np.argmax(q)
 
 class Agent:
@@ -120,7 +119,6 @@ class Agent:
     def replay(self):
         states, actions, rewards, next_states, dones = self.buffer.sample()
         q = self.q_target.predict(next_states)
-        q = np.rollaxis(np.array(q), 0, 2)
         next_actions = np.argmax(np.mean(q, axis=2), axis=1)
         theta = []
         for i in range(self.batch_size):
@@ -128,7 +126,6 @@ class Agent:
                 theta.append(np.ones(self.atoms) * rewards[i])
             else:
                 theta.append(rewards[i] + self.gamma * q[i][next_actions[i]])
-        # theta = np.array(theta)
         self.q.train(states, theta, actions)
         
 
