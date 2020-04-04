@@ -23,20 +23,22 @@ parser.add_argument('--v_max', type=float, default=5.)
 
 args = parser.parse_args()
 
+
 class ReplayBuffer:
     def __init__(self, capacity=10000):
         self.buffer = deque(maxlen=capacity)
-    
+
     def put(self, state, action, reward, next_state, done):
         self.buffer.append([state, action, reward, next_state, done])
-    
+
     def sample(self):
         sample = random.sample(self.buffer, args.batch_size)
-        states, actions, rewards, next_states, done = map(np.asarray, zip(*sample))
+        states, actions, rewards, next_states, done = map(
+            np.asarray, zip(*sample))
         states = np.array(states).reshape(args.batch_size, -1)
         next_states = np.array(next_states).reshape(args.batch_size, -1)
         return states, actions, rewards, next_states, done
-    
+
     def size(self):
         return len(self.buffer)
 
@@ -60,7 +62,7 @@ class ActionValueModel:
         for _ in range(self.action_dim):
             outputs.append(Dense(self.atoms, activation='softmax')(h2))
         return tf.keras.Model(input_state, outputs)
-    
+
     def train(self, x, y):
         y = tf.stop_gradient(y)
         with tf.GradientTape() as tape:
@@ -68,10 +70,10 @@ class ActionValueModel:
             loss = self.criterion(y, logits)
         grads = tape.gradient(loss, self.model.trainable_variables)
         self.opt.apply_gradients(zip(grads, self.model.trainable_variables))
-    
+
     def predict(self, state):
         return self.model.predict(state)
-    
+
     def get_action(self, state, ep):
         state = np.reshape(state, [1, self.state_dim])
         eps = 1. / ((ep / 10) + 1)
@@ -79,12 +81,13 @@ class ActionValueModel:
             return np.random.randint(0, self.action_dim)
         else:
             return self.get_optimal_action(state)
-        
+
     def get_optimal_action(self, state):
         z = self.model.predict(state)
         z_concat = np.vstack(z)
         q = np.sum(np.multiply(z_concat, np.array(self.z)), axis=1)
         return np.argmax(q)
+
 
 class Agent:
     def __init__(self, env):
@@ -100,13 +103,14 @@ class Agent:
         self.z = [self.v_min + i * self.delta_z for i in range(self.atoms)]
         self.gamma = args.gamma
         self.q = ActionValueModel(self.state_dim, self.action_dim, self.z)
-        self.q_target = ActionValueModel(self.state_dim, self.action_dim, self.z)
+        self.q_target = ActionValueModel(
+            self.state_dim, self.action_dim, self.z)
         self.target_update()
-    
+
     def target_update(self):
         weights = self.q.model.get_weights()
         self.q_target.model.set_weights(weights)
-    
+
     def replay(self):
         states, actions, rewards, next_states, dones = self.buffer.sample()
         z = self.q.predict(next_states)
@@ -115,7 +119,8 @@ class Agent:
         q = np.sum(np.multiply(z_concat, np.array(self.z)), axis=1)
         q = q.reshape((self.batch_size, self.action_dim), order='F')
         next_actions = np.argmax(q, axis=1)
-        m_prob = [np.zeros((self.batch_size, self.atoms)) for _ in range(self.action_dim)]
+        m_prob = [np.zeros((self.batch_size, self.atoms))
+                  for _ in range(self.action_dim)]
         for i in range(self.batch_size):
             if dones[i]:
                 Tz = min(self.v_max, max(self.v_min, rewards[i]))
@@ -125,11 +130,14 @@ class Agent:
                 m_prob[actions[i]][i][int(u)] += (bj - l)
             else:
                 for j in range(self.atoms):
-                    Tz = min(self.v_max, max(self.v_min, rewards[i] + self.gamma * self.z[j]))
+                    Tz = min(self.v_max, max(
+                        self.v_min, rewards[i] + self.gamma * self.z[j]))
                     bj = (Tz - self.v_min) / self.delta_z
                     l, u = math.floor(bj), math.ceil(bj)
-                    m_prob[actions[i]][i][int(l)] += z_[next_actions[i]][i][j] * (u - bj)
-                    m_prob[actions[i]][i][int(u)] += z_[next_actions[i]][i][j] * (bj - l)
+                    m_prob[actions[i]][i][int(
+                        l)] += z_[next_actions[i]][i][j] * (u - bj)
+                    m_prob[actions[i]][i][int(
+                        u)] += z_[next_actions[i]][i][j] * (bj - l)
         self.q.train(states, m_prob)
 
     def train(self, max_epsiodes=500):
@@ -139,23 +147,26 @@ class Agent:
             while not done:
                 action = self.q.get_action(state, ep)
                 next_state, reward, done, _ = self.env.step(action)
-                self.buffer.put(state, action, -1 if done else 0, next_state, done)
-                
+                self.buffer.put(state, action, -
+                                1 if done else 0, next_state, done)
+
                 if self.buffer.size() > 1000:
                     self.replay()
                 if steps % 5 == 0:
                     self.target_update()
-                
+
                 state = next_state
                 total_reward += reward
                 steps += 1
             wandb.log({'reward': total_reward})
             print('EP{} reward={}'.format(ep, total_reward))
 
+
 def main():
     env = gym.make('CartPole-v1')
     agent = Agent(env)
     agent.train()
+
 
 if __name__ == "__main__":
     main()
