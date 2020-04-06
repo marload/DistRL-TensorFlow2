@@ -1,8 +1,6 @@
-# NOTE: IQN is not yet complete.
-
 import wandb
 import tensorflow as tf
-from tensorflow.keras.layers import Input, Dense, Reshape, Softmax
+from tensorflow.keras.layers import Input, Dense, Reshape, ReLU
 from tensorflow.keras.optimizers import Adam
 
 import gym
@@ -18,8 +16,9 @@ wandb.init(name='IQN', project="dist-rl-tf2")
 parser = argparse.ArgumentParser()
 parser.add_argument('--gamma', type=float, default=0.99)
 parser.add_argument('--lr', type=float, default=0.0001)
-parser.add_argument('--batch_size', type=int, default=8)
+parser.add_argument('--batch_size', type=int, default=16)
 parser.add_argument('--atoms', type=int, default=8)
+parser.add_argument('--quantile_dim', type=int, default=64)
 
 args = parser.parse_args()
 
@@ -43,33 +42,68 @@ class ReplayBuffer:
         return len(self.buffer)
 
 
+class Network(tf.keras.Model):
+    def __init__(self, state_dim, action_dim):
+        super(Network, self).__init__()
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.quantile_dim = args.quantile_dim
+        self.atoms = args.atoms
+        self.batch_size = args.batch_size
+
+        self.feature_extraction = tf.keras.Sequential([
+            Input((self.state_dim,)),
+            Dense(64, activation='relu'),
+            Dense(64, activation='relu')
+        ])
+        self.phi = Dense(self.quantile_dim, activation=None, use_bias=False)
+        self.phi_bias = tf.cast(tf.Variable(
+            tf.zeros(self.quantile_dim)), tf.float64)
+        self.fc = Dense(128, activation='relu')
+        self.fc_q = Dense(self.action_dim, activation=None)
+        self.relu = ReLU()
+
+    def call(self, state):
+        x = self.feature_extraction(state)
+        feature_dim = x.shape[1]
+        tau = np.random.rand(self.atoms, 1)
+        pi_mtx = tf.constant(np.expand_dims(
+            np.pi * np.arange(0, self.quantile_dim), axis=0))
+        cos_tau = tf.cos(tf.matmul(tau, pi_mtx))
+        phi = self.relu(self.phi(cos_tau) +
+                        tf.expand_dims(self.phi_bias, axis=0))
+        phi = tf.expand_dims(phi, axis=0)
+        x = tf.reshape(x, (-1, feature_dim))
+        x = tf.expand_dims(x, 1)
+        x = x * phi
+        x = self.fc(x)
+        x = self.fc_q(x)
+        q = tf.transpose(x, [0, 2, 1])
+        return q, tau
+
+
 class ActionValueModel:
     def __init__(self, state_dim, action_dim):
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.atoms = args.atoms
-        self.tau = [(2*(i-1)+1)/(2*self.atoms) for i in range(1, self.atoms+1)]
         self.huber_loss = tf.keras.losses.Huber(
             reduction=tf.keras.losses.Reduction.NONE)
         self.opt = tf.keras.optimizers.Adam(args.lr)
         self.model = self.create_model()
 
     def create_model(self):
-        return tf.keras.Sequential([
-            Input([self.state_dim, ]),
-            Dense(64, activation='relu'),
-            Dense(64, activation='relu'),
-            Dense(self.action_dim * self.atoms, activation='linear'),
-            Reshape([self.action_dim, self.atoms])
-        ])
+        net = Network(self.state_dim, self.action_dim)
+        net.build((None, self.state_dim))
+        return net
 
-    def quantile_huber_loss(self, target, pred, actions):
+    def quantile_huber_loss(self, target, pred, actions, tau):
         pred = tf.reduce_sum(pred * tf.expand_dims(actions, -1), axis=1)
         pred_tile = tf.tile(tf.expand_dims(pred, axis=2), [1, 1, self.atoms])
         target_tile = tf.tile(tf.expand_dims(
             target, axis=1), [1, self.atoms, 1])
         huber_loss = self.huber_loss(target_tile, pred_tile)
-        tau = tf.reshape(np.array(self.tau), [1, self.atoms])
+        tau = tf.reshape(np.array(tau), [1, self.atoms])
         inv_tau = 1.0 - tau
         tau = tf.tile(tf.expand_dims(tau, axis=1), [1, self.atoms, 1])
         inv_tau = tf.tile(tf.expand_dims(inv_tau, axis=1), [1, self.atoms, 1])
@@ -82,13 +116,13 @@ class ActionValueModel:
 
     def train(self, states, target, actions):
         with tf.GradientTape() as tape:
-            theta = self.model(states)
-            loss = self.quantile_huber_loss(target, theta, actions)
+            theta, tau = self.model(states)
+            loss = self.quantile_huber_loss(target, theta, actions, tau)
         grads = tape.gradient(loss, self.model.trainable_variables)
         self.opt.apply_gradients(zip(grads, self.model.trainable_variables))
 
     def predict(self, state):
-        return self.model.predict(state)
+        return self.model(state, training=False)
 
     def get_action(self, state, ep):
         state = np.reshape(state, [1, self.state_dim])
@@ -99,8 +133,8 @@ class ActionValueModel:
             return self.get_optimal_action(state)
 
     def get_optimal_action(self, state):
-        z = self.model.predict(state)[0]
-        q = np.mean(z, axis=1)
+        z, tau = self.model(state, training=False)
+        q = np.mean(z, axis=2)[0]
         return np.argmax(q)
 
 
@@ -123,7 +157,7 @@ class Agent:
 
     def replay(self):
         states, actions, rewards, next_states, dones = self.buffer.sample()
-        q = self.q_target.predict(next_states)
+        q, tau = self.q_target.predict(next_states)  # tau
         next_actions = np.argmax(np.mean(q, axis=2), axis=1)
         theta = []
         for i in range(self.batch_size):
@@ -142,8 +176,8 @@ class Agent:
                 next_state, reward, done, _ = self.env.step(action)
                 action_ = np.zeros(self.action_dim)
                 action_[action] = 1
-                self.buffer.put(state, action_, -
-                                1 if done else 0, next_state, done)
+                self.buffer.put(state, action_,
+                                -1 if done else 0, next_state, done)
 
                 if self.buffer.size() > 1000:
                     self.replay()
