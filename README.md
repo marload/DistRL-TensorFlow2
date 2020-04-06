@@ -5,6 +5,7 @@
 </p>
 
 <h2 align=center>Distributional RL in TensorFlow2</h2>
+dist-rl-tf2 is a repository that implements a variety of popular Distribution Reinforcement Learning Algorithms using TensorFlow2. Distributional RL is an algorithm suitable for stochastic environments. If you want to study the Distribution RL, this repository will be the best choice.
 
 ## Algorithms
 
@@ -15,9 +16,9 @@
 
 <a name='c51'></a>
 ### C51
-
+<hr>
 <a name='qrdqn'></a>
 ### QRDQN
-
+<hr>
 <a name='icn'></a>
 ### ICN
