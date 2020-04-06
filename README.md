@@ -121,3 +121,12 @@ tau = np.random.rand(self.atoms, 1)
 # Discrete Action Space IQN
 $ python IQN/IQN.py
 ```
+<hr>
+
+## Reference
+- https://reinforcement-learning-kr.github.io/2018/09/27/Distributional_intro/
+- https://github.com/reinforcement-learning-kr/distributional_rl
+- https://github.com/floringogianu/categorical-dqn
+- https://github.com/ku2482/fqf-iqn-qrdqn.pytorch
+- https://github.com/xlnwel/model-free-algorithms
+- https://github.com/valeoai/rainbow-iqn-apex
