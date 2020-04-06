@@ -14,6 +14,9 @@
 - [QRDQN](#qrdqn)
 - [IQN](#iqn)
 <hr>
+<p align="center">
+  <img width="500" src="./assets/dist-rl-cpr.png">
+</p>
 
 <a name='c51'></a>
 ### C51
