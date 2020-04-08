@@ -45,7 +45,9 @@ $ python C51/C51.py
 ```
 <hr>
 <a name='qrdqn'></a>
+
 ### QRDQN
+
 **Paper** [Distributional Reinforcement Learning with Quantile Regression](https://arxiv.org/abs/1710.10044)<br>
 **Author** Will Dabney, Mark Rowland, Marc G. Bellemare, Rémi Munos<br>
 **Method** OFF-Policy / Temporal-Diffrence / Model-Free<br>
