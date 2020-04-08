@@ -91,7 +91,9 @@ $ python QR-DQN/QR-DQN.py
 ```
 <hr>
 <a name='iqn'></a>
+
 ### IQN
+
 **Paper** [Implicit Quantile Networks for Distributional Reinforcement Learning](https://arxiv.org/abs/1806.06923)<br>
 **Author** Will Dabney, Georg Ostrovski, David Silver, Rémi Munos<br>
 **Method** OFF-Policy / Temporal-Diffrence / Model-Free<br>
