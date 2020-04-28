@@ -6,7 +6,7 @@
 
 <h2 align=center>Distributional RL in TensorFlow2</h2>
 
-[DistRL-TensorFlow2](github.com/marload/dist-rl-tf2) is a repository that implements a variety of popular Distribution Reinforcement Learning Algorithms using [TensorFlow2](tensorflow.org). Distributional RL is an algorithm suitable for stochastic environments. If you want to study the Distribution RL, this repository will be the best choice. The dist-rl-tf2 includes three Distributional RL algorithms published by [DeepMind](deepmind.com), a leading AI research institute.
+[DistRL-TensorFlow2](github.com/marload/DistRL-TensorFlow2) is a repository that implements a variety of popular Distribution Reinforcement Learning Algorithms using [TensorFlow2](tensorflow.org). Distributional RL is an algorithm suitable for stochastic environments. If you want to study the Distribution RL, this repository will be the best choice. The dist-rl-tf2 includes three Distributional RL algorithms published by [DeepMind](deepmind.com), a leading AI research institute.
 
 ## Algorithms
 
